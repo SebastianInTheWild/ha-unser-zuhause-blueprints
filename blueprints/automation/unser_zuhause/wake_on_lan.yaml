@@ -1,0 +1,101 @@
+blueprint:
+  name: Unser Zuhause – Wake on LAN mit Rückmeldung
+  author: SebastianInTheWild
+  description: >
+    Nach einem Druck auf den Wake-on-LAN-Knopf kommt eine Push-Nachricht: ob der Rechner schon lief,
+    ob er hochgefahren ist oder ob er nach der Wartezeit immer noch nicht erreichbar ist.
+
+
+    Als „online“ gilt ein Geräte-Tracker im Zustand `home` (z. B. aus UniFi oder FRITZ!Box) oder ein
+    Binärsensor im Zustand `on` (z. B. aus der Ping-Integration).
+    Benötigt die Integration „Unser Zuhause“ (Versand an Personen).
+  source_url: https://github.com/SebastianInTheWild/ha-unser-zuhause-blueprints/blob/main/blueprints/automation/unser_zuhause/wake_on_lan.yaml
+  domain: automation
+  homeassistant:
+    min_version: "2024.10.0"
+  input:
+    wol_button:
+      name: Wake-on-LAN-Knopf
+      selector:
+        entity:
+          filter:
+            - domain: button
+    online_entity:
+      name: Online-Status
+      selector:
+        entity:
+          filter:
+            - domain:
+                - device_tracker
+                - binary_sensor
+    device_name:
+      name: Name des Rechners
+      description: Leer lassen, dann wird der Name des Online-Status verwendet.
+      default: ""
+      selector:
+        text: {}
+    timeout:
+      name: Warten bis zu
+      default:
+        minutes: 5
+      selector:
+        duration: {}
+    notify_persons:
+      name: Personen
+      description: Wer die Nachricht bekommt.
+      selector:
+        entity:
+          filter:
+            - domain: person
+          multiple: true
+
+mode: single
+max_exceeded: silent
+
+variables:
+  online_entity: !input online_entity
+  device_name: !input device_name
+  name: "{{ device_name or state_attr(online_entity, 'friendly_name') }}"
+  timeout: !input timeout
+  minuten: >-
+    {{ ((timeout.hours | default(0)) * 60 + (timeout.minutes | default(0))
+        + (timeout.seconds | default(0)) / 60) | round(0) | int }}
+  notify_persons: !input notify_persons
+
+triggers:
+  # Ein Knopf ändert beim Drücken seinen Zustand (Zeitpunkt des letzten Drucks).
+  - trigger: state
+    entity_id: !input wol_button
+    not_from:
+      - unavailable
+      - unknown
+    not_to:
+      - unavailable
+      - unknown
+
+actions:
+  - alias: Läuft er schon?
+    if:
+      - condition: state
+        entity_id: !input online_entity
+        state:
+          - home
+          - "on"
+    then:
+      - action: unser_zuhause.notify
+        data:
+          persons: "{{ notify_persons }}"
+          title: "{{ name }}"
+          message: "{{ name }} war bereits online."
+      - stop: War schon online
+  - alias: Warten, bis er online ist
+    wait_template: "{{ states(online_entity) in ['home', 'on'] }}"
+    timeout: !input timeout
+    continue_on_timeout: true
+  - action: unser_zuhause.notify
+    data:
+      persons: "{{ notify_persons }}"
+      title: "{{ name }}"
+      message: >-
+        {{ name ~ ' ist jetzt online.' if wait.completed
+           else name ~ ' ist ' ~ minuten ~ ' Minuten nach dem Wake on LAN noch nicht online.' }}

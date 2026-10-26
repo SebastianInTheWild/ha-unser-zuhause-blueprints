@@ -1,0 +1,160 @@
+blueprint:
+  name: Unser Zuhause – Licht nach Zeitplan
+  author: SebastianInTheWild
+  description: >
+    Schaltet Lichter nach Sonnenstand und Uhrzeit: an bei Sonnenuntergang und/oder zu einer festen
+    Uhrzeit, aus zu einer festen Uhrzeit und/oder bei Sonnenaufgang. Jeder Zeitpunkt lässt sich einzeln
+    abschalten. Optional mit Helligkeit, Farbtemperatur, sanftem Einblenden und einer Bedingung fürs
+    Einschalten (z. B. nur, wenn jemand zuhause ist). Ausgeschaltet wird immer.
+
+
+    Ein Ziel kann auch ein Bereich oder ein Label sein, z. B. alle Lichter mit dem Label „Weihnachten“.
+  source_url: https://github.com/SebastianInTheWild/ha-unser-zuhause-blueprints/blob/main/blueprints/automation/unser_zuhause/licht_zeitplan.yaml
+  domain: automation
+  homeassistant:
+    min_version: "2024.10.0"
+  input:
+    lights:
+      name: Lichter
+      selector:
+        target:
+          entity:
+            - domain: light
+    einschalten:
+      name: Einschalten
+      icon: mdi:lightbulb-on
+      input:
+        on_sunset:
+          name: Bei Sonnenuntergang
+          default: true
+          selector:
+            boolean: {}
+        on_at_time:
+          name: Zu einer Uhrzeit
+          default: false
+          selector:
+            boolean: {}
+        on_time:
+          name: Uhrzeit
+          default: "05:00:00"
+          selector:
+            time: {}
+        on_conditions:
+          name: Nur einschalten, wenn
+          description: Leer lassen für immer – z. B. Hausmodus ist „anwesend“.
+          default: []
+          selector:
+            condition: {}
+    ausschalten:
+      name: Ausschalten
+      icon: mdi:lightbulb-off
+      input:
+        off_at_time:
+          name: Zu einer Uhrzeit
+          default: true
+          selector:
+            boolean: {}
+        off_time:
+          name: Uhrzeit
+          default: "23:00:00"
+          selector:
+            time: {}
+        off_sunrise:
+          name: Bei Sonnenaufgang
+          default: true
+          selector:
+            boolean: {}
+    licht:
+      name: Helligkeit & Farbe
+      icon: mdi:palette
+      collapsed: true
+      input:
+        brightness:
+          name: Helligkeit
+          description: 0 = so lassen, wie das Licht es sich gemerkt hat.
+          default: 0
+          selector:
+            number:
+              min: 0
+              max: 100
+              unit_of_measurement: "%"
+        color_temp:
+          name: Farbtemperatur
+          description: 0 = so lassen. Warmweiß ≈ 2700 K, Neutralweiß ≈ 4000 K.
+          default: 0
+          selector:
+            number:
+              min: 0
+              max: 6500
+              step: 100
+              unit_of_measurement: K
+        fade:
+          name: Sanft einblenden
+          description: Startet bei 1 % und blendet in dieser Zeit auf die Helligkeit hoch. 0 = sofort.
+          default: 0
+          selector:
+            number:
+              min: 0
+              max: 600
+              unit_of_measurement: s
+
+mode: restart
+
+variables:
+  brightness: !input brightness
+  color_temp: !input color_temp
+  fade: !input fade
+  farbe: "{{ {'color_temp_kelvin': color_temp | int} if color_temp | int > 0 else {} }}"
+  ziel: >-
+    {{ dict(farbe, **({'brightness_pct': brightness | int} if brightness | int > 0 else {})) }}
+
+triggers:
+  - trigger: sun
+    event: sunset
+    id: an
+    enabled: !input on_sunset
+  - trigger: time
+    at: !input on_time
+    id: an
+    enabled: !input on_at_time
+  - trigger: time
+    at: !input off_time
+    id: aus
+    enabled: !input off_at_time
+  - trigger: sun
+    event: sunrise
+    id: aus
+    enabled: !input off_sunrise
+
+actions:
+  - choose:
+      - alias: Einschalten
+        conditions:
+          - condition: trigger
+            id: an
+          - condition: and
+            conditions: !input on_conditions
+        sequence:
+          - if:
+              - condition: template
+                value_template: "{{ fade | int > 0 }}"
+            then:
+              - action: light.turn_on
+                target: !input lights
+                data: "{{ dict(farbe, brightness_pct=1) }}"
+              - delay:
+                  seconds: 1
+              - action: light.turn_on
+                target: !input lights
+                data: "{{ dict(ziel, brightness_pct=(brightness | int if brightness | int > 0 else 100), transition=fade | int) }}"
+            else:
+              - action: light.turn_on
+                target: !input lights
+                data: "{{ ziel }}"
+      - alias: Ausschalten
+        conditions:
+          - condition: trigger
+            id: aus
+        sequence:
+          - action: light.turn_off
+            target: !input lights

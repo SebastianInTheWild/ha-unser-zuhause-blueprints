@@ -8,6 +8,11 @@ Personen auswählen, fertig.
 | **Systemwarnungen** | Push an die Home-Assistant-App, wenn der Global Health Score fällt, der Speicher fast voll ist oder das letzte Backup zu alt ist. Antippen öffnet die System-Seite. | [![Blueprint importieren](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2FSebastianInTheWild%2Fha-unser-zuhause-blueprints%2Fblob%2Fmain%2Fblueprints%2Fautomation%2Funser_zuhause%2Fsystemwarnungen.yaml) |
 | **Abwesenheits-Check** | Wechselt der Hausmodus auf „Abwesend“: Push mit allem, was noch offen ist oder läuft (Fenster & Türen, Lichter, Musik, Geräte) – mit Knopf „Lichter & Musik aus“. | [![Blueprint importieren](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2FSebastianInTheWild%2Fha-unser-zuhause-blueprints%2Fblob%2Fmain%2Fblueprints%2Fautomation%2Funser_zuhause%2Fabwesenheits_check.yaml) |
 | **Kamera-Modus** | Stellt Kameras/Alarmanlagen nach Hausmodus und Uhrzeit auf Abwesend, Zuhause oder Nacht – einzelne erst, wenn z. B. der Fernseher aus ist. Optional Push, wenn sich ein Modus geändert hat. | [![Blueprint importieren](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2FSebastianInTheWild%2Fha-unser-zuhause-blueprints%2Fblob%2Fmain%2Fblueprints%2Fautomation%2Funser_zuhause%2Fkamera_modus.yaml) |
+| **Hausmodus** | Setzt den Hausmodus auf „anwesend“, sobald jemand heimkommt, und auf „abwesend“, wenn alle weg sind. Optional mit Pause-Schalter, der sich selbst wieder abschaltet. | [![Blueprint importieren](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2FSebastianInTheWild%2Fha-unser-zuhause-blueprints%2Fblob%2Fmain%2Fblueprints%2Fautomation%2Funser_zuhause%2Fhausmodus.yaml) |
+| **Rollläden** | Schließt die Rollläden, wenn der Hausmodus auf „abwesend“ geht, und öffnet sie beim Heimkommen – tagsüber alle gewählten, abends nur ausgewählte. | [![Blueprint importieren](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2FSebastianInTheWild%2Fha-unser-zuhause-blueprints%2Fblob%2Fmain%2Fblueprints%2Fautomation%2Funser_zuhause%2Frolllaeden.yaml) |
+| **Licht nach Zeitplan** | Lichter an bei Sonnenuntergang und/oder zur Uhrzeit, aus zur Uhrzeit und/oder bei Sonnenaufgang – mit Helligkeit, Farbtemperatur, Einblenden und Bedingung. | [![Blueprint importieren](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2FSebastianInTheWild%2Fha-unser-zuhause-blueprints%2Fblob%2Fmain%2Fblueprints%2Fautomation%2Funser_zuhause%2Flicht_zeitplan.yaml) |
+| **Person kommt/geht** | Push, wenn jemand nach Hause kommt oder geht (mit Zone, z. B. „📍 Arbeit“). | [![Blueprint importieren](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2FSebastianInTheWild%2Fha-unser-zuhause-blueprints%2Fblob%2Fmain%2Fblueprints%2Fautomation%2Funser_zuhause%2Fkommt_geht.yaml) |
+| **Wake on LAN** | Push nach dem Wake-on-LAN-Knopf: war schon an, ist jetzt online oder nach der Wartezeit noch nicht erreichbar. | [![Blueprint importieren](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2FSebastianInTheWild%2Fha-unser-zuhause-blueprints%2Fblob%2Fmain%2Fblueprints%2Fautomation%2Funser_zuhause%2Fwake_on_lan.yaml) |
 
 ## Voraussetzungen
 
@@ -22,6 +27,10 @@ Personen auswählen, fertig.
   der offenen bzw. eingeschalteten Entitäten führen (wie Gruppen).
 - **Kamera-Modus:** eine Alarm-Zentrale (`alarm_control_panel`), z. B. Eufy (Entität „Security mode“), Alarmo
   oder Ring. Die Integration Unser Zuhause braucht es nur für die Nachricht und den Hausmodus.
+- **Hausmodus, Rollläden:** der Hausmodus der Integration Unser Zuhause (oder ein eigenes `input_select`).
+  Der Rollläden-Blueprint braucht Home Assistant 2025.4 oder neuer.
+- **Wake on LAN:** ein Wake-on-LAN-Knopf (Integration *Wake on LAN*) und ein Online-Status – Geräte-Tracker
+  (z. B. UniFi, FRITZ!Box) oder Binärsensor (z. B. *Ping*).
 
 ## Einrichten
 
@@ -76,6 +85,59 @@ Beispiel-Nachricht (nur, wenn sich ein Modus geändert hat):
 Hamm: 😴 Nacht
 Speicher: 😴 Nacht
 ```
+
+### Hausmodus – Einstellungen
+
+| Feld | Standard |
+| --- | --- |
+| Personen | – (Pflicht) |
+| Alle weg seit mindestens | 30 Sekunden |
+| Hausmodus / Zustände | `select.unser_zuhause_hausmodus` / `anwesend` / `abwesend` |
+| Pause-Schalter / endet nach | leer / 1 Stunde – solange an, bleibt der Hausmodus, wie er ist |
+| Personen benachrichtigen | leer – sonst Nachricht, wenn die Pause beginnt oder endet |
+
+Wer in einer anderen Zone ist (z. B. Arbeit), zählt als weg. Beim Start von Home Assistant und am Ende einer
+Pause wird der Hausmodus neu berechnet.
+
+### Rollläden – Einstellungen
+
+| Feld | Standard |
+| --- | --- |
+| Bei Abwesenheit schließen | – (Pflicht; Rollläden, Bereiche oder Etagen) |
+| Beim Heimkommen öffnen (tagsüber) | – (Pflicht) |
+| Beim Heimkommen öffnen (abends) | leer |
+| Tagsüber bis | 20:00 (und zwischen Sonnenaufgang und Sonnenuntergang) |
+| Personen benachrichtigen | leer = keine Nachricht |
+| Zusätzlich beim Schließen / Öffnen | leer – z. B. einen Status-Helfer setzen |
+
+### Licht nach Zeitplan – Einstellungen
+
+| Feld | Standard |
+| --- | --- |
+| Lichter | – (Pflicht; auch Bereich oder Label) |
+| Einschalten bei Sonnenuntergang / zur Uhrzeit | an / aus (05:00) |
+| Nur einschalten, wenn | leer – z. B. Hausmodus ist „anwesend“ |
+| Ausschalten zur Uhrzeit / bei Sonnenaufgang | an (23:00) / an |
+| Helligkeit / Farbtemperatur | 0 = so lassen |
+| Sanft einblenden | 0 s – sonst ab 1 % in dieser Zeit hoch |
+
+Für mehrere Lampen mit unterschiedlichen Zeiten einfach mehrere Automationen aus dem Blueprint anlegen.
+
+### Person kommt/geht – Einstellungen
+
+| Feld | Standard |
+| --- | --- |
+| Personen / Empfänger | – (Pflicht) |
+| Titel | `Anwesenheit` |
+
+### Wake on LAN – Einstellungen
+
+| Feld | Standard |
+| --- | --- |
+| Wake-on-LAN-Knopf / Online-Status | – (Pflicht) |
+| Name des Rechners | leer = Name des Online-Status |
+| Warten bis zu | 5 Minuten |
+| Personen | – (Pflicht) |
 
 ## Dazugehörige Repos
 

@@ -1,0 +1,71 @@
+blueprint:
+  name: Unser Zuhause – Person kommt/geht
+  author: SebastianInTheWild
+  description: >
+    Push-Nachricht, wenn eine der gewählten Personen nach Hause kommt oder das Haus verlässt. Wechselt
+    sie in eine andere Zone (z. B. Arbeit), steht die Zone in der Nachricht.
+
+
+    Benötigt die Integration „Unser Zuhause“ (Versand an Personen).
+  source_url: https://github.com/SebastianInTheWild/ha-unser-zuhause-blueprints/blob/main/blueprints/automation/unser_zuhause/kommt_geht.yaml
+  domain: automation
+  homeassistant:
+    min_version: "2024.10.0"
+  input:
+    persons:
+      name: Personen
+      description: Über wen eine Nachricht kommt.
+      selector:
+        entity:
+          filter:
+            - domain: person
+          multiple: true
+    notify_persons:
+      name: Empfänger
+      description: Wer die Nachricht bekommt.
+      selector:
+        entity:
+          filter:
+            - domain: person
+          multiple: true
+    title:
+      name: Titel
+      default: Anwesenheit
+      selector:
+        text: {}
+
+mode: parallel
+max: 10
+
+variables:
+  notify_persons: !input notify_persons
+  title: !input title
+
+triggers:
+  - trigger: state
+    entity_id: !input persons
+    to: home
+    not_from:
+      - unavailable
+      - unknown
+    id: kommt
+  - trigger: state
+    entity_id: !input persons
+    from: home
+    not_to:
+      - unavailable
+      - unknown
+    id: geht
+
+actions:
+  - action: unser_zuhause.notify
+    data:
+      persons: "{{ notify_persons }}"
+      title: "{{ title }} – {{ trigger.to_state.name }}"
+      message: >-
+        {{ trigger.to_state.name }} ist
+        {{ '🏠 zuhause' if trigger.id == 'kommt'
+           else '🚶 unterwegs' if trigger.to_state.state == 'not_home'
+           else '📍 ' ~ trigger.to_state.state }}
+      data:
+        group: anwesenheit

@@ -1,0 +1,178 @@
+blueprint:
+  name: Unser Zuhause – Hausmodus nach Anwesenheit
+  author: SebastianInTheWild
+  description: >
+    Setzt den Hausmodus auf „anwesend“, sobald jemand nach Hause kommt, und auf „abwesend“, wenn alle
+    gewählten Personen eine Weile weg sind. Personen in einer anderen Zone (z. B. Arbeit) zählen als weg.
+    Beim Start von Home Assistant wird der Hausmodus neu berechnet.
+
+
+    Optional pausiert ein Schalter (`input_boolean`) die Umschaltung, z. B. wenn das Handy zu Hause
+    liegt. Die Pause endet nach der eingestellten Zeit von selbst, danach wird der Hausmodus neu berechnet.
+
+
+    Benötigt die Integration „Unser Zuhause“ (Hausmodus, Versand an Personen). Ein eigenes
+    `input_select` geht auch.
+  source_url: https://github.com/SebastianInTheWild/ha-unser-zuhause-blueprints/blob/main/blueprints/automation/unser_zuhause/hausmodus.yaml
+  domain: automation
+  homeassistant:
+    min_version: "2024.10.0"
+  input:
+    anwesenheit:
+      name: Personen & Hausmodus
+      icon: mdi:home-account
+      input:
+        persons:
+          name: Personen
+          description: Wer zum Haushalt zählt. Ist eine davon zuhause, ist der Hausmodus „anwesend“.
+          selector:
+            entity:
+              filter:
+                - domain: person
+              multiple: true
+        away_delay:
+          name: Alle weg seit mindestens
+          description: Kurz weg (z. B. Müll rausbringen, GPS-Sprung) soll den Hausmodus nicht umstellen.
+          default:
+            seconds: 30
+          selector:
+            duration: {}
+        house_mode:
+          name: Hausmodus
+          default: select.unser_zuhause_hausmodus
+          selector:
+            entity:
+              filter:
+                - domain:
+                    - select
+                    - input_select
+        home_state:
+          name: Zustand „anwesend“
+          default: anwesend
+          selector:
+            text: {}
+        away_state:
+          name: Zustand „abwesend“
+          default: abwesend
+          selector:
+            text: {}
+    pause:
+      name: Pause
+      icon: mdi:pause-circle
+      collapsed: true
+      input:
+        pause_switch:
+          name: Pause-Schalter
+          description: Solange einer davon an ist, bleibt der Hausmodus, wie er ist.
+          default: []
+          selector:
+            entity:
+              filter:
+                - domain: input_boolean
+              multiple: true
+        pause_duration:
+          name: Pause endet nach
+          default:
+            hours: 1
+          selector:
+            duration: {}
+        notify_persons:
+          name: Personen benachrichtigen
+          description: Wer eine Nachricht bekommt, wenn die Pause beginnt oder endet. Leer lassen für keine.
+          default: []
+          selector:
+            entity:
+              filter:
+                - domain: person
+              multiple: true
+
+mode: queued
+max: 10
+
+variables:
+  persons: !input persons
+  house_mode: !input house_mode
+  home_state: !input home_state
+  away_state: !input away_state
+  pause_switch: !input pause_switch
+  notify_persons: !input notify_persons
+
+triggers:
+  - trigger: state
+    entity_id: !input persons
+    to: home
+    id: kommt
+  - trigger: state
+    entity_id: !input persons
+    from: home
+    for: !input away_delay
+    id: geht
+  - trigger: homeassistant
+    event: start
+    id: start
+  - trigger: state
+    entity_id: !input pause_switch
+    from: "off"
+    to: "on"
+    id: pause_an
+  - trigger: state
+    entity_id: !input pause_switch
+    from: "on"
+    to: "off"
+    id: pause_aus
+  - trigger: state
+    entity_id: !input pause_switch
+    to: "on"
+    for: !input pause_duration
+    id: pause_ende
+
+actions:
+  - choose:
+      - alias: Pause abgelaufen
+        conditions:
+          - condition: trigger
+            id: pause_ende
+        sequence:
+          # Das Ausschalten löst „pause_aus“ aus und berechnet den Hausmodus neu.
+          - action: input_boolean.turn_off
+            target:
+              entity_id: "{{ trigger.entity_id }}"
+      - alias: Pause beginnt
+        conditions:
+          - condition: trigger
+            id: pause_an
+          - condition: template
+            value_template: "{{ notify_persons | count > 0 }}"
+        sequence:
+          - action: unser_zuhause.notify
+            data:
+              persons: "{{ notify_persons }}"
+              title: ⏸️ Hausmodus pausiert
+              message: >-
+                {{ trigger.to_state.name }} ist an – der Hausmodus bleibt „{{ states(house_mode) }}“,
+                bis die Pause endet.
+    default:
+      - if:
+          - condition: trigger
+            id: pause_aus
+          - condition: template
+            value_template: "{{ notify_persons | count > 0 }}"
+        then:
+          - action: unser_zuhause.notify
+            data:
+              persons: "{{ notify_persons }}"
+              title: ▶️ Hausmodus läuft wieder
+              message: "{{ trigger.to_state.name }} ist aus – der Hausmodus richtet sich wieder nach der Anwesenheit."
+      - alias: Nicht pausiert
+        condition: template
+        value_template: "{{ pause_switch | select('is_state', 'on') | list | count == 0 }}"
+      - variables:
+          ziel: "{{ home_state if persons | select('is_state', 'home') | list | count > 0 else away_state }}"
+      - alias: Nur bei Änderung
+        condition: template
+        value_template: "{{ states(house_mode) != ziel }}"
+      - action: "{{ house_mode.split('.')[0] }}.select_option"
+        target:
+          entity_id: "{{ house_mode }}"
+        data:
+          option: "{{ ziel }}"
