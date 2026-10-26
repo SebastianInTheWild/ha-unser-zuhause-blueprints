@@ -7,7 +7,7 @@ Personen auswählen, fertig.
 | --- | --- | --- |
 | **Systemwarnungen** | Push an die Home-Assistant-App, wenn der Global Health Score fällt, der Speicher fast voll ist oder das letzte Backup zu alt ist. Antippen öffnet die System-Seite. | [![Blueprint importieren](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2FSebastianInTheWild%2Fha-unser-zuhause-blueprints%2Fblob%2Fmain%2Fblueprints%2Fautomation%2Funser_zuhause%2Fsystemwarnungen.yaml) |
 | **Abwesenheits-Check** | Wechselt der Hausmodus auf „Abwesend“: Push mit allem, was noch offen ist oder läuft (Fenster & Türen, Lichter, Musik, Geräte) – mit Knopf „Lichter & Musik aus“. | [![Blueprint importieren](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2FSebastianInTheWild%2Fha-unser-zuhause-blueprints%2Fblob%2Fmain%2Fblueprints%2Fautomation%2Funser_zuhause%2Fabwesenheits_check.yaml) |
-| **Kamera-Modus** | Stellt Kameras/Alarmanlagen nach Hausmodus und Uhrzeit auf Abwesend, Zuhause oder Nacht. Optional Push, wenn sich ein Modus geändert hat. | [![Blueprint importieren](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2FSebastianInTheWild%2Fha-unser-zuhause-blueprints%2Fblob%2Fmain%2Fblueprints%2Fautomation%2Funser_zuhause%2Fkamera_modus.yaml) |
+| **Kamera-Modus** | Stellt Kameras/Alarmanlagen nach Hausmodus und Uhrzeit auf Abwesend, Zuhause oder Nacht – einzelne erst, wenn z. B. der Fernseher aus ist. Optional Push, wenn sich ein Modus geändert hat. | [![Blueprint importieren](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2FSebastianInTheWild%2Fha-unser-zuhause-blueprints%2Fblob%2Fmain%2Fblueprints%2Fautomation%2Funser_zuhause%2Fkamera_modus.yaml) |
 
 ## Voraussetzungen
 
@@ -65,6 +65,7 @@ Beispiel-Nachricht:
 | Alarm-Zentralen | – (Pflicht) |
 | Hausmodus / Zustand „abwesend“ | `select.unser_zuhause_hausmodus` / `abwesend` (jeder andere Wert gilt als zuhause) |
 | Zuhause-Modus ab / Nacht-Modus ab | 07:00 / 21:00 |
+| Später in den Nacht-Modus | leer – z. B. die Zentrale im Wohnzimmer, erst wenn der Fernseher 5 Minuten aus ist; bis dahin Zuhause-Modus |
 | Personen | leer = keine Nachricht |
 | Status prüfen nach | 30 Sekunden (Eufy meldet den neuen Modus verzögert) |
 

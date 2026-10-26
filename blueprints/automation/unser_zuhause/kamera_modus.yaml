@@ -7,6 +7,10 @@ blueprint:
     und bei jedem Wechsel des Hausmodus.
 
 
+    Einzelne Zentralen können später in den Nacht-Modus gehen, z. B. die im Wohnzimmer erst, wenn der
+    Fernseher aus ist. Bis dahin bleiben sie im Zuhause-Modus.
+
+
     Optional kommt eine Push-Nachricht mit dem neuen Modus – nur, wenn sich wirklich etwas geändert hat.
     Funktioniert mit jeder Alarm-Zentrale (`alarm_control_panel`), z. B. Eufy, Alarmo oder Ring.
     Für die Nachricht wird die Integration „Unser Zuhause“ (Versand an Personen) benötigt.
@@ -52,6 +56,36 @@ blueprint:
           default: "21:00:00"
           selector:
             time: {}
+    spaeter:
+      name: Später in den Nacht-Modus
+      icon: mdi:television
+      collapsed: true
+      input:
+        late_panels:
+          name: Zentralen
+          description: >-
+            Diese Zentralen (aus der Liste oben) gehen abends erst in den Nacht-Modus, wenn alle Geräte
+            darunter aus sind. Bis dahin bleiben sie im Zuhause-Modus.
+          default: []
+          selector:
+            entity:
+              filter:
+                - domain: alarm_control_panel
+              multiple: true
+        keep_awake:
+          name: Erst wenn aus
+          description: Z. B. der Fernseher oder ein Ping-Sensor, der zeigt, ob der Fernseher läuft.
+          default: []
+          selector:
+            entity:
+              multiple: true
+        keep_awake_off_for:
+          name: Aus seit mindestens
+          description: Kurzes Ausschalten (z. B. Senderwechsel, Neustart) soll nicht zählen.
+          default:
+            minutes: 5
+          selector:
+            duration: {}
     nachricht:
       name: Benachrichtigung
       icon: mdi:bell
@@ -84,7 +118,11 @@ max: 5
 
 variables:
   alarm_panels: !input alarm_panels
+  late_panels_input: !input late_panels
+  keep_awake: !input keep_awake
   notify_persons: !input notify_persons
+  late_panels: "{{ alarm_panels | select('in', late_panels_input) | list }}"
+  now_panels: "{{ alarm_panels | reject('in', late_panels) | list }}"
 
 triggers:
   - trigger: time
@@ -94,6 +132,24 @@ triggers:
   - trigger: state
     entity_id: !input house_mode
     to: ~
+  - trigger: state
+    entity_id: !input keep_awake
+    from: "on"
+    to: "off"
+    for: !input keep_awake_off_for
+    id: keep_awake
+
+conditions:
+  # Das Ausschalten des Fernsehers zählt nur abends.
+  - condition: or
+    conditions:
+      - condition: not
+        conditions:
+          - condition: trigger
+            id: keep_awake
+      - condition: time
+        after: !input night_start
+        before: !input day_start
 
 actions:
   - variables:
@@ -119,9 +175,29 @@ actions:
               entity_id: "{{ alarm_panels }}"
     default:
       - alias: Nacht
-        action: alarm_control_panel.alarm_arm_night
-        target:
-          entity_id: "{{ alarm_panels }}"
+        if:
+          - condition: template
+            value_template: "{{ now_panels | count > 0 }}"
+        then:
+          - action: alarm_control_panel.alarm_arm_night
+            target:
+              entity_id: "{{ now_panels }}"
+      - alias: Nacht – erst wenn alles aus ist
+        if:
+          - condition: template
+            value_template: "{{ late_panels | count > 0 }}"
+        then:
+          - if:
+              - condition: template
+                value_template: "{{ keep_awake | select('is_state', 'on') | list | count == 0 }}"
+            then:
+              - action: alarm_control_panel.alarm_arm_night
+                target:
+                  entity_id: "{{ late_panels }}"
+            else:
+              - action: alarm_control_panel.alarm_arm_home
+                target:
+                  entity_id: "{{ late_panels }}"
   - alias: Benachrichtigung nur bei geändertem Modus
     if:
       - condition: template
