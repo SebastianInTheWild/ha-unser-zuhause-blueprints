@@ -28,7 +28,10 @@ jobs:
           for path in sorted(pathlib.Path("blueprints").rglob("*.yaml")):
               data = yaml.load(path.read_text(encoding="utf-8"), Loader=Loader)
               bp = data.get("blueprint", {})
-              inputs = set(bp.get("input", {}))
+              inputs = set()
+              # Abschnitte (sections) enthalten ihre Eingaben unter `input`
+              for key, value in bp.get("input", {}).items():
+                  inputs |= set(value["input"]) if "input" in (value or {}) else {key}
               used = set()
 
               def walk(x):
