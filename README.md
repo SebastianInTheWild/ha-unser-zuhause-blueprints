@@ -1,6 +1,11 @@
 # Unser Zuhause – Automationen (Blueprints)
 
 [![Validate](https://github.com/SebastianInTheWild/ha-unser-zuhause-blueprints/actions/workflows/validate.yml/badge.svg?branch=main)](https://github.com/SebastianInTheWild/ha-unser-zuhause-blueprints/actions/workflows/validate.yml)
+[![Home Assistant](https://img.shields.io/badge/Home%20Assistant-2024.10%2B-41BDF5?logo=homeassistant&logoColor=white)](https://www.home-assistant.io/)
+[![Blueprints](https://img.shields.io/github/directory-file-count/SebastianInTheWild/ha-unser-zuhause-blueprints/blueprints/automation/unser_zuhause?type=file&label=Blueprints&color=41BDF5)](blueprints/automation/unser_zuhause)
+[![Benötigt: Unser Zuhause](https://img.shields.io/badge/ben%C3%B6tigt-Unser%20Zuhause-blue)](https://github.com/SebastianInTheWild/ha-unser-zuhause-integration)
+[![Lizenz](https://img.shields.io/github/license/SebastianInTheWild/ha-unser-zuhause-blueprints)](LICENSE)
+[![Letzter Commit](https://img.shields.io/github/last-commit/SebastianInTheWild/ha-unser-zuhause-blueprints)](https://github.com/SebastianInTheWild/ha-unser-zuhause-blueprints/commits/main)
 
 Automationen zum Dashboard **„Unser Zuhause“** als Home-Assistant-Blueprints. Mit einem Klick importieren,
 Personen auswählen, fertig.
