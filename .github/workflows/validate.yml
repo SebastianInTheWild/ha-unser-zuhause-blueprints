@@ -54,3 +54,27 @@ jobs:
                   print(f"✓ {path}: {bp['name']} ({len(inputs)} Eingaben)")
           sys.exit(0 if ok else 1)
           EOF
+
+  homeassistant:
+    name: In Home Assistant laden
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+      - run: pip install pyyaml
+      - name: Test-Konfiguration bauen (eine Automation pro Blueprint)
+        run: python .github/scripts/blueprint_testconfig.py blueprints ci-config
+      - name: Konfiguration prüfen (Home Assistant stable)
+        run: |
+          image=ghcr.io/home-assistant/home-assistant:stable
+          docker pull -q "$image"
+          docker run --rm --entrypoint python "$image" -c "import homeassistant.const as c; print('Home Assistant', c.__version__)"
+          # check_config endet auch bei abgelehnten Automationen mit 0 – die Fehler stehen nur im Log.
+          docker run --rm --entrypoint python -v "$PWD/ci-config:/config" "$image" \
+            -m homeassistant --script check_config -c /config 2>&1 | tee check.log
+          if sed 's/\x1b\[[0-9;]*m//g' check.log | grep -qwE "ERROR|CRITICAL"; then
+            echo "::error::Home Assistant hat mindestens einen Blueprint abgelehnt (Details oben)."
+            exit 1
+          fi
