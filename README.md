@@ -1,5 +1,7 @@
 # Unser Zuhause – Automationen (Blueprints)
 
+[![Validate](https://github.com/SebastianInTheWild/ha-unser-zuhause-blueprints/actions/workflows/validate.yml/badge.svg?branch=main)](https://github.com/SebastianInTheWild/ha-unser-zuhause-blueprints/actions/workflows/validate.yml)
+
 Automationen zum Dashboard **„Unser Zuhause“** als Home-Assistant-Blueprints. Mit einem Klick importieren,
 Personen auswählen, fertig.
 
