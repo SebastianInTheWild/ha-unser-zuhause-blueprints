@@ -1,0 +1,168 @@
+blueprint:
+  name: Unser Zuhause – Rollläden nach Hausmodus
+  author: SebastianInTheWild
+  description: >
+    Wechselt der Hausmodus auf „abwesend“, gehen die gewählten Rollläden zu. Kommt jemand nach Hause,
+    gehen sie tagsüber wieder auf (nach Sonnenaufgang, vor Sonnenuntergang und vor der eingestellten
+    Uhrzeit). Abends öffnen sich nur die dafür gewählten Rollläden, z. B. die Terrassentür.
+
+
+    Optional kommt eine Push-Nachricht und es laufen eigene Aktionen, z. B. einen Status-Helfer setzen.
+    Benötigt die Integration „Unser Zuhause“ (Hausmodus, Versand an Personen).
+  source_url: https://github.com/SebastianInTheWild/ha-unser-zuhause-blueprints/blob/main/blueprints/automation/unser_zuhause/rolllaeden.yaml
+  domain: automation
+  homeassistant:
+    min_version: "2025.4.0"
+  input:
+    rolllaeden:
+      name: Rollläden
+      icon: mdi:window-shutter
+      input:
+        close_target:
+          name: Bei Abwesenheit schließen
+          description: Einzelne Rollläden, ganze Bereiche oder Etagen.
+          selector:
+            target:
+              entity:
+                - domain: cover
+        open_target:
+          name: Beim Heimkommen öffnen (tagsüber)
+          selector:
+            target:
+              entity:
+                - domain: cover
+        evening_target:
+          name: Beim Heimkommen öffnen (abends)
+          description: Leer lassen, wenn abends nichts aufgehen soll.
+          default: {}
+          selector:
+            target:
+              entity:
+                - domain: cover
+        open_until:
+          name: Tagsüber bis
+          description: Nach dieser Uhrzeit (oder nach Sonnenuntergang) gilt „abends“.
+          default: "20:00:00"
+          selector:
+            time: {}
+    hausmodus:
+      name: Hausmodus
+      icon: mdi:home-account
+      collapsed: true
+      input:
+        house_mode:
+          name: Hausmodus
+          default: select.unser_zuhause_hausmodus
+          selector:
+            entity:
+              filter:
+                - domain:
+                    - select
+                    - input_select
+        home_state:
+          name: Zustand „anwesend“
+          default: anwesend
+          selector:
+            text: {}
+        away_state:
+          name: Zustand „abwesend“
+          default: abwesend
+          selector:
+            text: {}
+    extras:
+      name: Nachricht & eigene Aktionen
+      icon: mdi:bell
+      collapsed: true
+      input:
+        notify_persons:
+          name: Personen benachrichtigen
+          description: Leer lassen für keine Nachricht.
+          default: []
+          selector:
+            entity:
+              filter:
+                - domain: person
+              multiple: true
+        close_actions:
+          name: Zusätzlich beim Schließen
+          default: []
+          selector:
+            action: {}
+        open_actions:
+          name: Zusätzlich beim Öffnen (tagsüber)
+          default: []
+          selector:
+            action: {}
+
+mode: queued
+max: 5
+
+variables:
+  evening_target: !input evening_target
+  notify_persons: !input notify_persons
+  hat_abends: "{{ (evening_target or {}).values() | select | list | count > 0 }}"
+  # wird in den Zweigen unten gesetzt
+  nachricht: ""
+
+triggers:
+  - trigger: state
+    entity_id: !input house_mode
+    to: ~
+    not_from:
+      - unavailable
+      - unknown
+
+actions:
+  - choose:
+      - alias: Abwesend
+        conditions:
+          - condition: state
+            entity_id: !input house_mode
+            state: !input away_state
+        sequence:
+          - action: cover.close_cover
+            target: !input close_target
+          - sequence: !input close_actions
+          - variables:
+              nachricht: Die Rollläden wurden geschlossen – niemand ist zuhause.
+      - alias: Zuhause, tagsüber
+        conditions:
+          - condition: state
+            entity_id: !input house_mode
+            state: !input home_state
+          - condition: sun
+            after: sunrise
+            before: sunset
+          - condition: time
+            before: !input open_until
+        sequence:
+          - action: cover.open_cover
+            target: !input open_target
+          - sequence: !input open_actions
+          - variables:
+              nachricht: Die Rollläden wurden geöffnet – willkommen zuhause.
+      - alias: Zuhause, abends
+        conditions:
+          - condition: state
+            entity_id: !input house_mode
+            state: !input home_state
+          - condition: template
+            value_template: "{{ hat_abends }}"
+        sequence:
+          - action: cover.open_cover
+            target: !input evening_target
+          - variables:
+              nachricht: Es ist schon spät – nur die Rollläden für abends wurden geöffnet.
+  - alias: Benachrichtigung
+    if:
+      - condition: template
+        value_template: "{{ notify_persons | count > 0 and nachricht != '' }}"
+    then:
+      - action: unser_zuhause.notify
+        data:
+          persons: "{{ notify_persons }}"
+          title: 🪟 Rollläden
+          message: "{{ nachricht }}"
+          data:
+            group: rolllaeden
+            tag: uz-rolllaeden
