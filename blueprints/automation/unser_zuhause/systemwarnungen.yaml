@@ -1,0 +1,171 @@
+blueprint:
+  name: Unser Zuhause – Systemwarnungen
+  author: SebastianInTheWild
+  description: >
+    Schickt eine Push-Nachricht an die Home-Assistant-App, wenn es dem Server schlecht geht:
+    Global Health Score zu niedrig, Speicher fast voll oder das letzte Backup zu alt.
+    Antippen der Nachricht öffnet die angegebene Seite (z. B. die System-Seite des Dashboards „Unser Zuhause“).
+
+
+    Benötigt: Integration „Unser Zuhause“ (Versand an Personen), Home-Assistant-App (mobile_app),
+    System Monitor (Speicherplatz),
+    optional „Home Assistant Global Health Score“ (HAGHS).
+  source_url: https://github.com/SebastianInTheWild/ha-unser-zuhause-blueprints/blob/main/blueprints/automation/unser_zuhause/systemwarnungen.yaml
+  domain: automation
+  homeassistant:
+    min_version: "2024.10.0"
+  input:
+    notify_persons:
+      name: Personen
+      description: >-
+        Wer die Nachricht bekommt. Die Handys werden automatisch über den in der
+        Home-Assistant-App angemeldeten Benutzer gefunden (Integration „Unser Zuhause“).
+      selector:
+        entity:
+          filter:
+            - domain: person
+          multiple: true
+    score_sensor:
+      name: Global Health Score
+      description: Sensor der Integration „Home Assistant Global Health Score“.
+      default: sensor.system_ha_global_health_score
+      selector:
+        entity:
+          filter:
+            - domain: sensor
+    score_below:
+      name: Warnen unter Score
+      default: 80
+      selector:
+        number:
+          min: 10
+          max: 100
+          step: 5
+    disk_sensor:
+      name: Speicherplatz (%)
+      description: System Monitor „Speicherplatz belegt“ (in Prozent).
+      default: sensor.disk_use_percent_config
+      selector:
+        entity:
+          filter:
+            - domain: sensor
+    disk_above:
+      name: Warnen über (%)
+      default: 85
+      selector:
+        number:
+          min: 50
+          max: 99
+          step: 1
+          unit_of_measurement: "%"
+    backup_sensor:
+      name: Letztes erfolgreiches Backup
+      description: Sensor der Backup-Integration „Letztes erfolgreiches automatisches Backup“.
+      default: sensor.backup_letztes_erfolgreiches_automatisches_backup
+      selector:
+        entity:
+          filter:
+            - domain: sensor
+              device_class: timestamp
+    backup_days:
+      name: Backup älter als (Tage)
+      default: 2
+      selector:
+        number:
+          min: 1
+          max: 30
+          step: 1
+    check_time:
+      name: Uhrzeit für die Backup-Prüfung
+      default: "09:00:00"
+      selector:
+        time: {}
+    open_path:
+      name: Seite beim Antippen
+      default: /unser-zuhause/system
+      selector:
+        text: {}
+
+mode: queued
+
+variables:
+  notify_persons: !input notify_persons
+  score_sensor: !input score_sensor
+  disk_sensor: !input disk_sensor
+  backup_sensor: !input backup_sensor
+  backup_days: !input backup_days
+  open_path: !input open_path
+
+triggers:
+  - trigger: numeric_state
+    entity_id: !input score_sensor
+    below: !input score_below
+    for:
+      minutes: 30
+    id: score
+  - trigger: numeric_state
+    entity_id: !input disk_sensor
+    above: !input disk_above
+    for:
+      minutes: 10
+    id: disk
+  - trigger: time
+    at: !input check_time
+    id: backup
+
+actions:
+  - choose:
+      - conditions:
+          - condition: trigger
+            id: score
+        sequence:
+          - action: unser_zuhause.notify
+            data:
+              persons: "{{ notify_persons }}"
+              title: "⚠️ Home Assistant"
+              message: >-
+                Global Health Score ist auf {{ states(score_sensor) | int(0) }} gesunken.
+                {%- if state_attr(score_sensor, 'hardware_score') is not none %}
+                Hardware {{ state_attr(score_sensor, 'hardware_score') }}, Anwendung {{ state_attr(score_sensor, 'application_score') }}.
+                {%- endif %}
+              data:
+                url: "{{ open_path }}"
+                group: system
+                tag: uz-score
+                push:
+                  interruption-level: time-sensitive
+      - conditions:
+          - condition: trigger
+            id: disk
+        sequence:
+          - action: unser_zuhause.notify
+            data:
+              persons: "{{ notify_persons }}"
+              title: "💾 Speicher fast voll"
+              message: "Der Speicher des Servers ist zu {{ states(disk_sensor) | round(0) }} % belegt."
+              data:
+                url: "{{ open_path }}"
+                group: system
+                tag: uz-disk
+                push:
+                  interruption-level: time-sensitive
+      - conditions:
+          - condition: trigger
+            id: backup
+          - condition: template
+            value_template: >-
+              {% set t = states(backup_sensor) | as_datetime(none) %}
+              {{ t is none or (now() - t).total_seconds() > backup_days * 86400 }}
+        sequence:
+          - action: unser_zuhause.notify
+            data:
+              persons: "{{ notify_persons }}"
+              title: "🗄️ Backup veraltet"
+              message: >-
+                {% set t = states(backup_sensor) | as_datetime(none) %}
+                {%- if t is none %}Es ist kein erfolgreiches automatisches Backup bekannt.
+                {%- else %}Das letzte erfolgreiche Backup ist {{ ((now() - t).total_seconds() / 86400) | round(0) | int }} Tage alt ({{ as_local(t).strftime('%d.%m. %H:%M') }}).{% endif %}
+              data:
+                url: "{{ open_path }}"
+                group: system
+                tag: uz-backup

@@ -1,0 +1,160 @@
+blueprint:
+  name: Unser Zuhause – Abwesenheits-Check
+  author: SebastianInTheWild
+  description: >
+    Wechselt der Hausmodus auf „Abwesend“, kommt eine Push-Nachricht mit allem, was noch offen ist
+    oder läuft: Fenster & Türen, Lichter, Musik und gewählte Geräte. Ist etwas an, enthält die Nachricht
+    den Knopf „Lichter & Musik aus“.
+
+
+    Benötigt die Integration „Unser Zuhause“ (Versand an Personen); sie liefert auch Hausmodus,
+    Fenster & Türen und Lichter an.
+    Eigene Sensoren gehen auch: Sie müssen im Attribut `entity_id` die Liste der offenen/eingeschalteten
+    Entitäten führen (wie Gruppen).
+  source_url: https://github.com/SebastianInTheWild/ha-unser-zuhause-blueprints/blob/main/blueprints/automation/unser_zuhause/abwesenheits_check.yaml
+  domain: automation
+  homeassistant:
+    min_version: "2024.10.0"
+  input:
+    notify_persons:
+      name: Personen
+      description: >-
+        Wer die Nachricht bekommt. Die Handys werden automatisch über den in der
+        Home-Assistant-App angemeldeten Benutzer gefunden (Integration „Unser Zuhause“).
+      selector:
+        entity:
+          filter:
+            - domain: person
+          multiple: true
+    house_mode:
+      name: Hausmodus
+      default: select.unser_zuhause_hausmodus
+      selector:
+        entity:
+          filter:
+            - domain:
+                - select
+                - input_select
+    away_state:
+      name: Zustand „abwesend“
+      description: Wert des Hausmodus, bei dem geprüft wird.
+      default: abwesend
+      selector:
+        text: {}
+    windows_sensor:
+      name: Fenster & Türen
+      default: binary_sensor.unser_zuhause_fenster_turen
+      selector:
+        entity: {}
+    lights_sensor:
+      name: Lichter an
+      default: sensor.unser_zuhause_lichter_an
+      selector:
+        entity: {}
+    devices:
+      name: Weitere Geräte
+      description: >
+        Werden gemeldet, wenn sie laufen (Zustand on, run oder running) – z. B. ein „Läuft“-Sensor
+        des Trockners oder der Betriebszustand der Spülmaschine.
+      default: []
+      selector:
+        entity:
+          multiple: true
+    check_media:
+      name: Laufende Musik/Medien melden
+      default: true
+      selector:
+        boolean: {}
+    open_path:
+      name: Seite beim Antippen
+      default: /unser-zuhause/zuhause
+      selector:
+        text: {}
+
+mode: queued
+
+variables:
+  notify_persons: !input notify_persons
+  windows_sensor: !input windows_sensor
+  lights_sensor: !input lights_sensor
+  devices: !input devices
+  check_media: !input check_media
+  open_path: !input open_path
+  action_id: "{{ 'UZ_ALLES_AUS_' ~ this.entity_id }}"
+
+triggers:
+  - trigger: state
+    entity_id: !input house_mode
+    to: !input away_state
+    id: away
+  - trigger: event
+    event_type: mobile_app_notification_action
+    id: button
+
+conditions:
+  # Knopf aus einer Nachricht dieser Automation
+  - condition: template
+    value_template: "{{ trigger.id == 'away' or trigger.event.data.action == action_id }}"
+
+actions:
+  - variables:
+      fenster: >-
+        {{ (state_attr(windows_sensor, 'entity_id') or []) | list | expand
+           | map(attribute='name') | join(', ') if is_state(windows_sensor, 'on') else '' }}
+      lichter: >-
+        {{ (state_attr(lights_sensor, 'entity_id') or []) | list | expand
+           | map(attribute='name') | join(', ') }}
+      medien_ids: >-
+        {{ states.media_player | selectattr('state', 'eq', 'playing') | map(attribute='entity_id') | list
+           if check_media else [] }}
+      medien: "{{ medien_ids | expand | map(attribute='name') | join(', ') }}"
+      geraete: >-
+        {{ devices | expand | selectattr('state', 'in', ['on', 'run', 'running'])
+           | map(attribute='name') | join(', ') }}
+  - choose:
+      - conditions:
+          - condition: trigger
+            id: away
+        sequence:
+          - action: unser_zuhause.notify
+            data:
+              persons: "{{ notify_persons }}"
+              title: "{{ '🏠 Alles in Ordnung' if not (fenster or lichter or medien or geraete) else '🏠 Noch offen oder an' }}"
+              message: >-
+                {% set z = [] %}
+                {%- if fenster %}{% set z = z + ['🪟 Offen: ' ~ fenster] %}{% endif %}
+                {%- if lichter %}{% set z = z + ['💡 An: ' ~ lichter] %}{% endif %}
+                {%- if medien %}{% set z = z + ['🔊 Spielt: ' ~ medien] %}{% endif %}
+                {%- if geraete %}{% set z = z + ['🌀 Läuft noch: ' ~ geraete] %}{% endif %}
+                {{- z | join('\n') if z else 'Alles zu und aus ✓' }}
+              data:
+                url: "{{ open_path }}"
+                group: abwesend
+                tag: uz-abwesend
+                push:
+                  interruption-level: time-sensitive
+                actions: >-
+                  {{ [{'action': action_id, 'title': 'Lichter & Musik aus', 'destructive': true}]
+                     if (lichter or medien) else [] }}
+      - conditions:
+          - condition: trigger
+            id: button
+        sequence:
+          - action: light.turn_off
+            target:
+              entity_id: all
+          - if:
+              - condition: template
+                value_template: "{{ medien_ids | count > 0 }}"
+            then:
+              - action: media_player.media_pause
+                target:
+                  entity_id: "{{ medien_ids }}"
+          - action: unser_zuhause.notify
+            data:
+              persons: "{{ notify_persons }}"
+              title: "🏠 Erledigt"
+              message: Alle Lichter sind aus, Musik pausiert.
+              data:
+                group: abwesend
+                tag: uz-abwesend

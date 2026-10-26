@@ -1,0 +1,53 @@
+name: Validate
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  blueprints:
+    name: Blueprints prüfen
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - run: pip install pyyaml
+      - name: YAML lesbar, Pflichtfelder vorhanden
+        run: |
+          python - <<'EOF'
+          import pathlib, sys, yaml
+
+          class Loader(yaml.SafeLoader):
+              pass
+
+          Loader.add_constructor("!input", lambda loader, node: {"__input__": loader.construct_scalar(node)})
+          ok = True
+          for path in sorted(pathlib.Path("blueprints").rglob("*.yaml")):
+              data = yaml.load(path.read_text(encoding="utf-8"), Loader=Loader)
+              bp = data.get("blueprint", {})
+              inputs = set(bp.get("input", {}))
+              used = set()
+
+              def walk(x):
+                  if isinstance(x, dict):
+                      if "__input__" in x:
+                          used.add(x["__input__"])
+                      for v in x.values():
+                          walk(v)
+                  elif isinstance(x, list):
+                      for v in x:
+                          walk(v)
+
+              walk({k: v for k, v in data.items() if k != "blueprint"})
+              missing = [k for k in ("name", "domain", "input", "source_url") if k not in bp]
+              unknown = used - inputs
+              if missing or unknown or "triggers" not in data or "actions" not in data:
+                  ok = False
+                  print(f"✗ {path}: fehlt {missing}, unbekannte Eingaben {sorted(unknown)}")
+              else:
+                  print(f"✓ {path}: {bp['name']} ({len(inputs)} Eingaben)")
+          sys.exit(0 if ok else 1)
+          EOF
