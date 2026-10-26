@@ -68,6 +68,7 @@ jobs:
         run: python .github/scripts/blueprint_testconfig.py blueprints ci-config
       - name: Konfiguration prüfen (Home Assistant stable)
         run: |
+          set -o pipefail
           image=ghcr.io/home-assistant/home-assistant:stable
           docker pull -q "$image"
           docker run --rm --entrypoint python "$image" -c "import homeassistant.const as c; print('Home Assistant', c.__version__)"
