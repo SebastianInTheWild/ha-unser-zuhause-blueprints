@@ -69,7 +69,7 @@ Beispiel-Nachricht:
 ```
 🏠 Noch offen oder an
 🪟 Offen: Büro Fenster
-💡 An: Deko Lampe, Pisskott
+💡 An: LED Streifen
 🔊 Spielt: Wohnzimmer
 [ Lichter & Musik aus ]
 ```
